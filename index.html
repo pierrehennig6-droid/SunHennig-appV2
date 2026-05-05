@@ -100,8 +100,8 @@ const SUPABASE_URL = "https://srvohurhpytcpialtwey.supabase.co";        // SunHe
 const SUPABASE_KEY = "sb_publishable_p6XO4gP58fpbV7G-qBYcPw_q1cAGOKX";
 
   const { createClient } = supabase;
-const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
-//const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+//const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 function rate(p){if(p<=100)return 30;if(p<=500)return 17;if(p<=1500)return 13;if(p<=3000)return 11;if(p<=5000)return 10;return 8.5}
 function aiRate(p, km, cost){
 
