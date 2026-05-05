@@ -57,6 +57,7 @@ button{background:#22c55e;color:#000;font-weight:bold}
 <div class="kpi">Profit/Hour <span id="pph">R0</span></div>
 <div class="kpi">ETA <span id="eta">0h</span></div>
 <div class="kpi">Decision <span id="decision">-</span></div>
+<div class="kpi">AI Suggestion <span id="ai_note">-</span></div>
 </div>
 
 <div class="grid">
@@ -101,6 +102,37 @@ const SUPABASE_KEY = "sb_publishable_p6XO4gP58fpbV7G-qBYcPw_q1cAGOKX";
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 //const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 function rate(p){if(p<=100)return 30;if(p<=500)return 17;if(p<=1500)return 13;if(p<=3000)return 11;if(p<=5000)return 10;return 8.5}
+function aiRate(p, km, cost){
+
+ let base = rate(p);
+
+ // 🔥 Efficiency bonus (large jobs should NOT get too cheap)
+ if(p > 1500){
+   base += 1.5;
+ }
+
+ // 🔥 Travel penalty (far jobs must cost more)
+ if(km > 20){
+   base += 2;
+ }
+ if(km > 50){
+   base += 3;
+ }
+
+ // 🔥 Minimum profitability protection
+ let rev = p * base;
+ let travel = km * 3;
+ let profit = rev - cost - travel;
+ let eta = p / 150;
+ let pph = profit / (eta || 1);
+
+ if(pph < 300){
+   base += 2; // push price up if job is weak
+ }
+
+ return base;
+}
+
 
 function calc(){
  const panelsEl=document.getElementById('panels');
@@ -112,7 +144,7 @@ function calc(){
  let p=+panelsEl.value||0;
  let km=+kmEl.value||0;
  let cost=+costEl.value||0;
- let r=rate(p);
+ let r = aiRate(p, km, cost); //let r=rate(p);
  let rev=p*r;
  let travel=km*3;   //traveling
  let profit=rev-cost-travel;
@@ -125,8 +157,36 @@ function calc(){
  setVal('profit',profit);
  setVal('pph',pph);
  etaEl.innerText=eta.toFixed(1)+'h';
- decisionEl.innerText=pph<300?'❌ REJECT':'✅ ACCEPT';
+ if(pph < 250){
+ decisionEl.innerText = '❌ LOSS JOB';
 }
+else if(pph < 350){
+ decisionEl.innerText = '⚠️ LOW PROFIT';
+}
+else if(pph < 600){
+ decisionEl.innerText = '✅ GOOD JOB';
+}
+else{
+ decisionEl.innerText = '🔥 HIGH VALUE';
+}   //decisionEl.innerText=pph<300?'❌ REJECT':'✅ ACCEPT';
+let note = '';
+
+if(km > 40){
+ note = 'Increase price (far travel)';
+}
+else if(p > 2000){
+ note = 'Large job — don’t underprice';
+}
+else if(pph < 300){
+ note = 'Price too low — increase rate';
+}
+else{
+ note = 'Pricing optimized';
+}
+
+document.getElementById('ai_note').innerText = note;
+}
+  }
 
 function setVal(id,v){document.getElementById(id).innerText='R '+Math.round(v)}
 
