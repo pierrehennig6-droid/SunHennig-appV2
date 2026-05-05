@@ -58,6 +58,7 @@ button{background:#22c55e;color:#000;font-weight:bold}
 <div class="kpi">ETA <span id="eta">0h</span></div>
 <div class="kpi">Decision <span id="decision">-</span></div>
 <div class="kpi">AI Suggestion <span id="ai_note">-</span></div>
+<div class="kpi">Explanation <span id="ai_explain">-</span></div>
 </div>
 
 <div class="grid">
@@ -183,11 +184,61 @@ else if(pph < 300){
 else{
  note = 'Pricing optimized';
 }
-
+let explanation = explainAI(p, km, cost, rev, travel, profit, eta, pph);
+document.getElementById('ai_explain').innerText = explanation;
 document.getElementById('ai_note').innerText = note;
 }
   }
 
+function explainAI(p, km, cost, rev, travel, profit, eta, pph){
+
+ let labour = 260; // your worker/day
+ let robot = 150;  // estimated wear per job (adjust later)
+
+ let explain = [];
+
+ // 🔹 Revenue explanation
+ explain.push(`Revenue = panels (${p}) × rate = R${rev}`);
+
+ // 🔹 Cost breakdown
+ explain.push(`Costs = Labour (R${labour}) + Robot wear (R${robot}) + Travel (R${travel}) + Base cost (R${cost})`);
+
+ // 🔹 Profit explanation
+ explain.push(`Profit = Revenue (R${rev}) - Total Costs = R${profit}`);
+
+ // 🔹 Time explanation
+ explain.push(`ETA = ${p} panels ÷ 150 panels/hour = ${eta.toFixed(1)}h`);
+
+ // 🔹 Profit/hour explanation
+ explain.push(`Profit/hour = R${profit} ÷ ${eta.toFixed(1)}h = R${Math.round(pph)}`);
+
+ // 🔹 Decision reasoning
+ if(pph < 250){
+   explain.push("Decision: REJECT → job loses money or wastes time");
+ }
+ else if(pph < 350){
+   explain.push("Decision: LOW PROFIT → only accept if needed");
+ }
+ else if(pph < 600){
+   explain.push("Decision: GOOD → stable profitable job");
+ }
+ else{
+   explain.push("Decision: HIGH VALUE → strong profit efficiency");
+ }
+
+ // 🔹 Travel logic
+ if(km > 40){
+   explain.push("Warning: High travel distance reduces profit");
+ }
+
+ // 🔹 Scale logic
+ if(p > 2000){
+   explain.push("Large job detected → pricing increased to avoid undercharging");
+ }
+
+ return explain.join(" | ");
+}
+  
 function setVal(id,v){document.getElementById(id).innerText='R '+Math.round(v)}
 
 // CLIENTS
