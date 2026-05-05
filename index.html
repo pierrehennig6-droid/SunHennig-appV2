@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>No Q Solar — Phase 5 COMPLETE (Clients + Scheduler FIXED)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBajlXTUx8dB3049gsGfRfGLkL6G5WwKnw&libraries=places"></script>
+<style>
+body{font-family:Arial;background:#0f172a;color:#fff;margin:0;padding:12px}
+.container{max-width:1000px;margin:auto;background:#1e293b;padding:12px;border-radius:12px}
+input,select,button{width:100%;padding:10px;margin:5px 0;border-radius:8px;border:none}
+button{background:#22c55e;color:#000;font-weight:bold}
+.secondary{background:#334155;color:#fff}
+.result{background:#020617;padding:10px;border-radius:10px;margin-top:10px}
+.kpi{display:flex;justify-content:space-between;margin:4px 0}
+.tabbar{display:flex;gap:5px}
+.tab{flex:1;padding:8px;text-align:center;background:#111827;border-radius:8px;cursor:pointer}
+.tab.active{background:#22c55e;color:#000}
+.card{background:#111827;padding:8px;margin:5px 0;border-radius:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+</style>
+</head>
+<body>
+  <div id="loginScreen" style="display:none">
+  <input id="loginEmail" placeholder="Email">
+  <input id="loginPass" type="password" placeholder="Password">
+  <button onclick="login()">Login</button>
+</div>
+<div class="container">
+<h2>No Q Solar — FULL SYSTEM (REAL FIXED)</h2>
+
+<div class="tabbar">
+<div class="tab active" onclick="showTab(event,'quote')">Quote</div>
+<div class="tab" onclick="showTab(event,'clients')">Clients</div>
+<div class="tab" onclick="showTab(event,'schedule')">Schedule</div>
+<div class="tab" onclick="showTab(event,'dashboard')">Dashboard</div>
+</div>
+
+<!-- QUOTE -->
+<div id="quoteTab">
+<select id="clientSelect" onchange="selectClient()"><option value="">Select Client</option></select>
+<div class="grid">
+<input id="panels" type="number" value="1000" oninput="calc()">
+<input id="clientAddress" placeholder="Client Address">
+<input id="km" type="number" value="0" oninput="calc()">
+<input id="cost" type="number" value="2500" oninput="calc()">
+</div>
+<button onclick="calcDistance()">Get Road Distance</button>
+
+<div class="result">
+<div class="kpi">Rate <span id="rate">R0</span></div>
+<div class="kpi">Revenue <span id="rev">R0</span></div>
+<div class="kpi">Travel <span id="travel">R0</span></div>
+<div class="kpi">Profit <span id="profit">R0</span></div>
+<div class="kpi">Profit/Hour <span id="pph">R0</span></div>
+<div class="kpi">ETA <span id="eta">0h</span></div>
+<div class="kpi">Decision <span id="decision">-</span></div>
+</div>
+
+<div class="grid">
+<button onclick="sendWA()">WhatsApp</button>
+<button onclick="downloadPDF()">PDF</button>
+<button onclick="saveJob()" class="secondary">Save Job</button>
+<button onclick="addToSchedule()" class="secondary">Add to Schedule</button>
+</div>
+</div>
+
+<!-- CLIENTS -->
+<div id="clientsTab" style="display:none">
+<input id="cname" placeholder="Name">
+<input id="cphone" placeholder="Phone">
+<input id="caddr" placeholder="Address">
+<button onclick="saveClient()">Save Client</button>
+<div id="clientList"></div>
+</div>
+
+<!-- SCHEDULE -->
+<div id="scheduleTab" style="display:none">
+<button onclick="autoSchedule()">Auto Schedule (Mon–Fri)</button>
+<div id="scheduleList"></div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboardTab" style="display:none">
+<div class="result">
+<div class="kpi">Jobs <span id="d_jobs">0</span></div>
+<div class="kpi">Revenue <span id="d_rev">R0</span></div>
+<div class="kpi">Profit <span id="d_profit">R0</span></div>
+</div>
+<div id="jobList"></div>
+</div>
+
+</div>
+<script>
+const SUPABASE_URL = "https://srvohurhpytcpialtwey.supabase.co";        // SunHennig!#
+const SUPABASE_KEY = "sb_publishable_p6XO4gP58fpbV7G-qBYcPw_q1cAGOKX";
+
+  const { createClient } = supabase;
+const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+//const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+function rate(p){if(p<=100)return 30;if(p<=500)return 17;if(p<=1500)return 13;if(p<=3000)return 11;if(p<=5000)return 10;return 8.5}
+
+function calc(){
+ const panelsEl=document.getElementById('panels');
+ const kmEl=document.getElementById('km');
+ const costEl=document.getElementById('cost');
+ const etaEl=document.getElementById('eta');
+ const decisionEl=document.getElementById('decision');
+
+ let p=+panelsEl.value||0;
+ let km=+kmEl.value||0;
+ let cost=+costEl.value||0;
+ let r=rate(p);
+ let rev=p*r;
+ let travel=km*3;   //traveling
+ let profit=rev-cost-travel;
+ let eta=p/150;     //panels per hour
+ let pph=profit/(eta||1);
+
+ setVal('rate',r);
+ setVal('rev',rev);
+ setVal('travel',travel);
+ setVal('profit',profit);
+ setVal('pph',pph);
+ etaEl.innerText=eta.toFixed(1)+'h';
+ decisionEl.innerText=pph<300?'❌ REJECT':'✅ ACCEPT';
+}
+
+function setVal(id,v){document.getElementById(id).innerText='R '+Math.round(v)}
+
+// CLIENTS
+async function saveClient(){
+
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+
+ let client = {
+   name: cname.value,
+   phone: cphone.value,
+   address: caddr.value
+ };
+
+ if(!navigator.onLine){
+   queueOffline({type:'client', data:client});
+   alert('⚠️ Offline — queued');
+   return;
+ }
+
+ await supabaseClient.from('clients').insert([client]);
+
+ loadClientsFromCloud(true);
+}
+
+let clientsCache = [];
+
+async function loadClientsFromCloud(force=false){
+
+ if(clientsCache.length && !force){
+   renderClientsUI(clientsCache);
+   return;
+ }
+
+ const { data } = await supabaseClient.from('clients').select('*');
+ clientsCache = data || [];
+
+ renderClientsUI(clientsCache);
+}
+
+function renderClientsUI(data){
+ let sel = document.getElementById('clientSelect');
+ sel.innerHTML = '<option value="">Select Client</option>';
+
+ data.forEach((c,i)=>{
+   sel.innerHTML += `<option value="${i}">${c.name}</option>`;
+ });
+
+ let html = '';
+ data.forEach((c)=>{
+   html += "<div class='card'>" + c.name + " (" + c.phone + ")" + "</div>";
+ });
+
+ document.getElementById('clientList').innerHTML = html;
+}
+
+function renderClients(){
+ let list = JSON.parse(localStorage.getItem('clients') || '[]');
+ let html = '';
+
+ list.forEach(function(c, i){
+   html += "<div class='card'>" +
+     c.name + " (" + c.phone + ")" +
+     "<br><button onclick='deleteClient(" + i + ")' style='background:#ef4444;color:#fff;margin-top:5px'>Delete</button>" +
+     "</div>";
+ });
+
+ document.getElementById('clientList').innerHTML = html;
+}
+
+function selectClient(){
+ const sel = document.getElementById('clientSelect');
+ const name = sel.options[sel.selectedIndex].text;
+
+ supabaseClient.from('clients').select('*').eq('name', name).single()
+ .then(({ data })=>{
+   if(data){
+     document.getElementById('clientAddress').value = data.address;
+   }
+ });
+}
+
+// JOBS
+async function saveJob(){
+
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+
+ let job = {
+   panels: document.getElementById('panels').value,
+   revenue: document.getElementById('rev').innerText,
+   profit: document.getElementById('profit').innerText,
+   created_at: new Date()
+ };
+
+ if(!navigator.onLine){
+   queueOffline({type:'job', data:job});
+   alert('⚠️ Offline — queued');
+   return;
+ }
+
+ await supabaseClient.from('jobs').insert([job]);
+
+ loadJobsFromCloud(true);
+}
+
+let jobsCache = [];
+
+async function loadJobsFromCloud(force=false){
+
+ if(jobsCache.length && !force){
+   renderJobsUI(jobsCache);
+   return;
+ }
+
+ const { data } = await supabaseClient.from('jobs').select('*');
+ jobsCache = data || [];
+
+ renderJobsUI(jobsCache);
+}
+
+function renderJobsUI(data){
+ let revSum = 0;
+ let profitSum = 0;
+ let html = '';
+ let daily = {};
+ let monthly = {};
+
+ data.forEach(function(j){
+   let revNum = parseInt((j.revenue || '0').replace(/\D/g,'')) || 0;
+   let profitNum = parseInt((j.profit || '0').replace(/\D/g,'')) || 0;
+
+   revSum += revNum;
+   profitSum += profitNum;
+
+   let d = new Date(j.created_at || Date.now());
+   let dayKey = d.toISOString().slice(0,10);
+   let monthKey = d.getFullYear() + "-" + (d.getMonth()+1);
+
+   daily[dayKey] = (daily[dayKey] || 0) + profitNum;
+   monthly[monthKey] = (monthly[monthKey] || 0) + profitNum;
+
+   html += "<div class='card'>" + j.panels + " panels | " + j.profit + "</div>";
+ });
+
+ document.getElementById('d_jobs').innerText = data.length;
+ document.getElementById('d_rev').innerText = 'R ' + revSum;
+ document.getElementById('d_profit').innerText = 'R ' + profitSum;
+
+ html += "<div class='card'><b>📊 Company Stats</b><br>";
+
+ Object.keys(daily).slice(-5).forEach(function(d){
+   html += d + ": R" + daily[d] + "<br>";
+ });
+
+ html += "<br>";
+
+ Object.keys(monthly).slice(-3).forEach(function(m){
+   html += m + ": R" + monthly[m] + "<br>";
+ });
+
+ html += "</div>";
+
+ document.getElementById('jobList').innerHTML = html;
+}
+
+// SCHEDULE
+async function addToSchedule(){
+   const { data: sessionData } = await supabaseClient.auth.getSession();
+   if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+
+ let panelsVal = document.getElementById('panels').value;
+
+ let job = {
+   panels: panelsVal,
+   eta: parseFloat(document.getElementById('eta').innerText) || 0,
+   profit: parseInt(document.getElementById('profit').innerText.replace(/\D/g,'')) || 0,
+   date: '',
+   time: ''
+ };
+
+ if(!navigator.onLine){
+   queueOffline({type:'schedule', data:job});
+   alert('⚠️ Offline — queued');
+   return;
+ }
+
+ await supabaseClient.from('schedule').insert([job]);
+
+ loadScheduleFromCloud(true);
+}
+
+async function autoSchedule(){
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+ const { data: scheduleData } = await supabaseClient.from('schedule').select('*');
+
+ let date = new Date();
+
+ for (let j of scheduleData){
+
+   do{
+     date.setDate(date.getDate()+1);
+   } while(date.getDay() === 0 || date.getDay() === 6);
+
+   let newDate = date.toISOString().split('T')[0];
+
+   await supabaseClient
+     .from('schedule')
+     .update({ date: newDate, time: '08:00' })
+     .eq('id', j.id);
+ }
+
+ loadScheduleFromCloud(true);
+}
+
+async function updateSchedule(index, field, value){
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+ const { data: scheduleData } = await supabaseClient.from('schedule').select('*');
+
+ let job = scheduleData[index];
+ if(!job) return;
+
+ job[field] = value;
+
+ if(job.time){
+   let t = job.time.split(':');
+   job.start = (+t[0]) + (+t[1]/60);
+   job.end = job.start + (job.eta || 0);
+ }
+
+ await supabaseClient
+   .from('schedule')
+   .update(job)
+   .eq('id', job.id);
+
+ loadScheduleFromCloud(true);
+}
+
+// DISTANCE
+function calcDistance(){
+ if(!navigator.geolocation){
+   alert('GPS not supported');
+   return;
+ }
+
+ let destination = document.getElementById('clientAddress').value;
+
+ if(!destination || destination.trim() === ""){
+   alert("Enter client address first");
+   return;
+ }
+
+ navigator.geolocation.getCurrentPosition(function(pos){
+
+   let origin = new google.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+   let service = new google.maps.DistanceMatrixService();
+
+   service.getDistanceMatrix({
+     origins: [origin],
+     destinations: [destination],
+     travelMode: 'DRIVING'
+   }, function(res, status){
+
+     if(status !== 'OK'){
+       alert('Distance error');
+       return;
+     }
+
+     let element = res.rows[0].elements[0];
+
+     // 🔥 CRITICAL SAFETY CHECK
+     if(!element || element.status !== "OK"){
+       alert("Invalid or unreachable address");
+       return;
+     }
+
+     let d = element.distance.value / 1000;
+
+     document.getElementById('km').value = d.toFixed(1);
+     calc();
+   });
+
+ });
+}
+
+// UTIL
+function sendWA(){
+ let panels = document.getElementById('panels').value;
+ let rev = document.getElementById('rev').innerText;
+ let profit = document.getElementById('profit').innerText;
+
+ let msg = `No Q Solar Quote\nPanels: ${panels}\nRevenue: ${rev}\nProfit: ${profit}`;
+ window.open('https://wa.me/?text=' + encodeURIComponent(msg));
+}
+
+function downloadPDF(){
+ const { jsPDF } = window.jspdf;
+ const doc = new jsPDF();
+
+ let panels = document.getElementById('panels').value;
+ let rev = document.getElementById('rev').innerText;
+ let profit = document.getElementById('profit').innerText;
+
+ doc.text('No Q Solar',20,20);
+ doc.text(`Panels: ${panels}`,20,40);
+ doc.text(`Revenue: ${rev}`,20,50);
+ doc.text(`Profit: ${profit}`,20,60);
+
+ doc.save('quote.pdf');
+}
+
+function showTab(e,t){
+ document.getElementById('quoteTab').style.display=t==='quote'?'block':'none';
+ document.getElementById('clientsTab').style.display=t==='clients'?'block':'none';
+ document.getElementById('scheduleTab').style.display=t==='schedule'?'block':'none';
+ document.getElementById('dashboardTab').style.display=t==='dashboard'?'block':'none';
+ document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+ e.target.classList.add('active');
+}
+
+ async function deleteSchedule(index){
+   const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+ const { data: scheduleData } = await supabaseClient.from('schedule').select('*');
+ let job = scheduleData[index];
+
+ if(!job) return;
+
+ await supabaseClient.from('schedule').delete().eq('id', job.id);
+
+ loadScheduleFromCloud(true);
+}
+  async function deleteJob(index){
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+  if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+ const { data: jobsData } = await supabaseClient.from('jobs').select('*');
+ let job = jobsData[index];
+
+ if(!job) return;
+
+ await supabaseClient.from('jobs').delete().eq('id', job.id);
+
+ loadJobsFromCloud(true);
+}
+  async function deleteClient(index){
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if(!sessionData.session){
+    alert("Not authenticated");
+    return;
+  }
+ const { data: clientsData } = await supabaseClient.from('clients').select('*');
+ let client = clientsData[index];
+
+ if(!client) return;
+
+ await supabaseClient.from('clients').delete().eq('id', client.id);
+
+ loadClientsFromCloud(true);
+}
+  function hasConflict(list, index){
+ let job = list[index];
+ if(!job.date || !job.start) return false;
+
+ return list.some((j,i)=>{
+   if(i === index) return false;
+   if(j.date !== job.date) return false;
+
+   return (job.start < j.end && job.end > j.start);
+ });
+}
+  function dailyLoad(list, date){
+ return list
+   .filter(j => j.date === date)
+   .reduce((sum, j) => sum + (j.eta || 0), 0);
+}
+  function moveJob(index, direction){
+ let list = JSON.parse(localStorage.getItem('schedule') || '[]');
+ let job = list[index];
+
+ if(!job.date) return;
+
+ let d = new Date(job.date);
+ d.setDate(d.getDate() + direction);
+
+ job.date = d.toISOString().split('T')[0];
+
+ localStorage.setItem('schedule', JSON.stringify(list));
+ renderSchedule();
+}
+
+  // 🔥 REAL-TIME SUPABASE SYNC (REPLACES BroadcastChannel)
+function initRealtime(){
+
+ supabaseClient
+   .channel('realtime-jobs')
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'jobs' }, () => {
+     loadJobsFromCloud(true);
+   })
+   .subscribe();
+
+ supabaseClient
+   .channel('realtime-clients')
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => {
+     loadClientsFromCloud(true);
+   })
+   .subscribe();
+
+ supabaseClient
+   .channel('realtime-schedule')
+   .on('postgres_changes', { event: '*', schema: 'public', table: 'schedule' }, () => {
+     loadScheduleFromCloud(true);
+   })
+   .subscribe();
+}
+
+  let offlineQueue = JSON.parse(localStorage.getItem('offlineQueue') || '[]');
+
+function queueOffline(action){
+ offlineQueue.push(action);
+ localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
+}
+
+async function processQueue(){
+
+ if(!navigator.onLine) return;
+
+ for(let action of offlineQueue){
+
+   if(action.type === 'job'){
+     await supabaseClient.from('jobs').insert([action.data]);
+   }
+
+   if(action.type === 'client'){
+     await supabaseClient.from('clients').insert([action.data]);
+   }
+
+   if(action.type === 'schedule'){
+     await supabaseClient.from('schedule').insert([action.data]);
+   }
+ }
+
+ offlineQueue = [];
+ localStorage.removeItem('offlineQueue');
+}
+  
+let scheduleCache = [];
+
+async function loadScheduleFromCloud(force=false){
+
+ if(scheduleCache.length && !force){
+   renderScheduleUI(scheduleCache);
+   return;
+ }
+
+ const { data } = await supabaseClient.from('schedule').select('*');
+scheduleCache = data || [];
+
+ renderScheduleUI(scheduleCache);
+}
+
+function renderScheduleUI(data){
+ let html = '';
+
+ data.forEach((j,i)=>{
+ html += `<div class='card'>
+ ${j.panels} panels | R${j.profit}<br>
+
+ <input type='date' value='${j.date || ""}' 
+ onchange='updateSchedule(${i},"date",this.value)'>
+
+ <input type='time' value='${j.time || ""}' 
+ onchange='updateSchedule(${i},"time",this.value)'>
+
+ <button onclick='deleteSchedule(${i})'
+ style='background:#ef4444;color:#fff;margin-top:5px'>
+ Delete
+ </button>
+
+ </div>`;
+ });
+
+ document.getElementById('scheduleList').innerHTML = html;
+} 
+
+function isStandalone(){
+ return window.matchMedia('(display-mode: standalone)').matches;
+}
+
+  async function login(){
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPass').value;
+
+  const { error } = await supabaseClient.auth.signInWithPassword({
+    email,
+    password
+  });
+
+  if(error){
+    alert("Login failed");
+    return;
+  }
+
+  initApp();
+}
+
+async function checkAuth(){
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+
+  if(!sessionData.session){
+    document.getElementById('loginScreen').style.display = 'block';
+    document.querySelector('.container').style.display = 'none';
+  } else {
+    initApp();
+  }
+}
+  
+  function registerPWA(){
+
+ if('serviceWorker' in navigator){
+   const blob = new Blob([`
+  const CACHE_VERSION = 'app-v2';
+  const STATIC_ASSETS = [
+    '/',
+  ];
+
+  self.addEventListener('install', e => {
+    self.skipWaiting();
+    e.waitUntil(
+      caches.open(CACHE_VERSION).then(cache => cache.addAll(STATIC_ASSETS))
+    );
+  });
+
+  self.addEventListener('activate', e => {
+    e.waitUntil(
+      caches.keys().then(keys =>
+        Promise.all(
+          keys.map(k => {
+            if (k !== CACHE_VERSION) return caches.delete(k);
+          })
+        )
+      )
+    );
+  });
+
+  self.addEventListener('fetch', e => {
+    const req = e.request;
+
+    // HTML → NETWORK FIRST (no stale UI)
+    if (req.headers.get('accept').includes('text/html')) {
+      e.respondWith(
+        fetch(req)
+          .then(res => {
+            const clone = res.clone();
+            caches.open(CACHE_VERSION).then(c => c.put(req, clone));
+            return res;
+          })
+          .catch(() => caches.match(req))
+      );
+      return;
+    }
+
+    // ASSETS → CACHE FIRST
+    e.respondWith(
+      caches.match(req).then(res =>
+        res || fetch(req).then(fetchRes => {
+          const clone = fetchRes.clone();
+          caches.open(CACHE_VERSION).then(c => c.put(req, clone));
+          return fetchRes;
+        })
+      )
+    );
+  });
+`], {type:'text/javascript'});
+
+   const url = URL.createObjectURL(blob);
+   navigator.serviceWorker.register(url);
+ }
+
+ let deferredPrompt;
+
+ window.addEventListener('beforeinstallprompt', (e) => {
+   e.preventDefault();
+   deferredPrompt = e;
+
+   let btn = document.createElement('button');
+   btn.innerText = '📱 Install App';
+   btn.style.position = 'fixed';
+   btn.style.bottom = '20px';
+   btn.style.right = '20px';
+
+   btn.onclick = () => deferredPrompt.prompt();
+
+   document.body.appendChild(btn);
+ });
+}
+  
+window.addEventListener('online', () => {
+ console.log('Back online — syncing...');
+ processQueue();
+});
+
+function initApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.querySelector('.container').style.display = 'block';
+
+  loadClientsFromCloud(true);
+  loadJobsFromCloud(true);
+  loadScheduleFromCloud(true);
+  calc();
+  initRealtime();
+  registerPWA();
+}
+
+checkAuth();
+</script>
+</body>
+</html>
